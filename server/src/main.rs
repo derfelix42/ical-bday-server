@@ -1,4 +1,8 @@
-use std::{cmp::Ordering, fs::File};
+use std::{
+    cmp::Ordering,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeDelta, Utc};
 use serde::Deserialize;
@@ -73,18 +77,44 @@ impl PartialEq for Person {
     }
 }
 
+// https://users.rust-lang.org/t/function-to-list-files-in-directories-and-in-subdirectories/46236/3
+pub fn _list_files(vec: &mut Vec<PathBuf>, path: &Path) -> std::io::Result<()> {
+    if std::fs::metadata(&path)?.is_dir() {
+        let paths = std::fs::read_dir(&path)?;
+        for path_result in paths {
+            let full_path = path_result?.path();
+            if std::fs::metadata(&full_path)?.is_dir() {
+                _list_files(vec, &full_path)?
+            } else {
+                vec.push(full_path);
+            }
+        }
+    }
+    Ok(())
+}
+
 // #[tokio::main]
 fn main() {
     println!("Upcoming birthdays - ordered (with the upcoming age):");
 
-    let file = File::open("people.csv").expect("Could not open people.csv");
-    let mut rdr = csv::Reader::from_reader(file);
-
+    let mut subfiles = Vec::new();
+    let _ = _list_files(&mut subfiles, Path::new("csv/"));
     let mut birthdays = Vec::new();
 
-    for result in rdr.deserialize() {
-        let person: Person = result.expect("Could not parse csv line as person");
-        birthdays.push(person);
+    for file in subfiles {
+        let filename = file.to_str().unwrap();
+        print!("Reading in {:?}", filename);
+        let file = File::open(file.clone()).expect(format!("Could not open {:#?}", file).as_str());
+        let mut rdr = csv::Reader::from_reader(file);
+
+        let mut counter = 0;
+        for result in rdr.deserialize() {
+            let person: Person = result.expect("Could not parse csv line as person");
+            birthdays.push(person);
+            counter += 1;
+        }
+
+        println!(" - got {counter} entries.");
     }
 
     birthdays.sort();
