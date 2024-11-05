@@ -1,13 +1,26 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, fs::File};
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeDelta, Utc};
+use serde::Deserialize;
 use tokio::signal;
 mod http_api;
 
-#[derive(Eq)]
+#[derive(Eq, Debug, Deserialize)]
 struct Person {
-    pub name: String,
+    #[serde(deserialize_with = "parse_date")]
     pub birthday: NaiveDate,
+    pub name: String,
+}
+
+// Custom deserialization function for 'birthday'
+fn parse_date<'de, D>(deserializer: D) -> Result<NaiveDate, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Deserialize the input into a string
+    let s: String = Deserialize::deserialize(deserializer)?;
+    // Parse the string into a NaiveDate with the format "yyyy-mm-dd"
+    NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(serde::de::Error::custom)
 }
 
 impl Person {
@@ -62,14 +75,17 @@ impl PartialEq for Person {
 
 // #[tokio::main]
 fn main() {
-    println!("Hallo Welt!");
+    println!("Upcoming birthdays - ordered (with the upcoming age):");
+
+    let file = File::open("people.csv").expect("Could not open people.csv");
+    let mut rdr = csv::Reader::from_reader(file);
 
     let mut birthdays = Vec::new();
 
-    birthdays.push(Person::create("Test".to_string(), 1970, 1, 1));
-
-    println!("Hello, world!");
-}
+    for result in rdr.deserialize() {
+        let person: Person = result.expect("Could not parse csv line as person");
+        birthdays.push(person);
+    }
 
     birthdays.sort();
 
